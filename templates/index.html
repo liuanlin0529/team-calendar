@@ -8,9 +8,6 @@
   <!-- FullCalendar -->
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 
-  <!-- Socket.IO -->
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-
   <!-- Font Awesome -->
   <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet" />
 
@@ -451,7 +448,6 @@ let members = [];
 let allEvents = [];         // 从服务器获取的所有事件
 let activeFilter = '全部';
 let calendar = null;
-let socket = null;
 let currentDetailEventId = null;
 let uploadedFile = null;
 
@@ -535,32 +531,30 @@ loadMembers = async function() {
   await restoreSession();
 };
 
-// ===== Socket.IO =====
+// ===== 轮询同步（替代 Socket.IO） =====
+let pollTimer = null;
+let lastEventCount = 0;
+
 function initSocket() {
-  socket = io();
-  socket.on('event_created', (data) => {
+  // 启动轮询：每 8 秒自动刷新事件列表
+  startPolling();
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
     if (!calendar) return;
-    // 如果事件不在本地列表中则添加
-    if (!allEvents.find(e => e.id === data.id)) {
-      allEvents.push(data);
-      refreshCalendarEvents();
-    }
-  });
-  socket.on('event_updated', (data) => {
-    if (!calendar) return;
-    const idx = allEvents.findIndex(e => e.id === data.id);
-    if (idx >= 0) {
-      allEvents[idx] = data;
-    } else {
-      allEvents.push(data);
-    }
-    refreshCalendarEvents();
-  });
-  socket.on('event_deleted', (data) => {
-    if (!calendar) return;
-    allEvents = allEvents.filter(e => e.id !== data.id);
-    refreshCalendarEvents();
-  });
+    try {
+      const res = await fetch('/api/events');
+      const newEvents = await res.json();
+      // 只在数据有变化时刷新
+      if (newEvents.length !== lastEventCount || JSON.stringify(newEvents) !== JSON.stringify(allEvents)) {
+        allEvents = newEvents;
+        lastEventCount = newEvents.length;
+        refreshCalendarEvents();
+      }
+    } catch (e) { /* ignore */ }
+  }, 8000);
 }
 
 // ===== 日历 =====

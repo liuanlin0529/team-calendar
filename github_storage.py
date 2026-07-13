@@ -188,3 +188,142 @@ def create_repo() -> dict:
         except Exception:
             err_msg = resp.text
         raise RuntimeError(f"创建仓库失败 ({resp.status_code}): {err_msg}")
+
+
+# ========== 数据 CRUD（用于 Vercel serverless 替代 SQLite） ==========
+
+DATA_DIR = "data"
+EVENTS_FILE = f"{DATA_DIR}/events.json"
+MEMBERS_FILE = f"{DATA_DIR}/members.json"
+
+DEFAULT_MEMBERS = [
+    {"id": 1, "name": "刘安林", "avatar_color": "#9fbcdb"},
+    {"id": 2, "name": "曹天姿", "avatar_color": "#bbaecc"},
+    {"id": 3, "name": "陈硕", "avatar_color": "#eecba8"},
+    {"id": 4, "name": "张子怡", "avatar_color": "#a6cbb5"},
+    {"id": 5, "name": "姚志锋", "avatar_color": "#ebd59a"},
+    {"id": 6, "name": "陈肃磊", "avatar_color": "#e0a2a2"},
+]
+
+EVENT_TYPE_COLORS = {
+    "卖方路演": "#9fbcdb",
+    "基金经理需求": "#eecba8",
+    "其他": "#a6cbb5",
+}
+
+
+def _read_json_file(github_path: str) -> list:
+    """从 GitHub 仓库读取 JSON 文件，不存在返回空列表。"""
+    if not is_configured():
+        return []
+    resp = requests.get(
+        _api_url(github_path),
+        headers=_headers(),
+        params={"ref": GITHUB_BRANCH},
+        timeout=15,
+    )
+    if resp.status_code == 404:
+        return []
+    if resp.status_code != 200:
+        return []
+    import base64 as _b64
+    content_b64 = resp.json().get("content", "")
+    try:
+        import json
+        return json.loads(_b64.b64decode(content_b64).decode("utf-8"))
+    except Exception:
+        return []
+
+
+def _write_json_file(github_path: str, data: list, message: str = "update data") -> bool:
+    """写入 JSON 数据到 GitHub 仓库文件。"""
+    if not is_configured():
+        return False
+    import json, base64 as _b64
+    content_b64 = _b64.b64encode(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")).decode("utf-8")
+
+    payload = {
+        "message": message,
+        "content": content_b64,
+        "branch": GITHUB_BRANCH,
+    }
+
+    # 检查文件是否已存在，获取 sha
+    resp_check = requests.get(
+        _api_url(github_path),
+        headers=_headers(),
+        params={"ref": GITHUB_BRANCH},
+        timeout=10,
+    )
+    if resp_check.status_code == 200:
+        payload["sha"] = resp_check.json()["sha"]
+
+    resp = requests.put(
+        _api_url(github_path),
+        headers=_headers(),
+        json=payload,
+        timeout=30,
+    )
+    return resp.status_code in (200, 201)
+
+
+# ---------- 成员 CRUD ----------
+
+def get_all_members() -> list:
+    members = _read_json_file(MEMBERS_FILE)
+    if not members:
+        # 首次运行，初始化默认成员
+        _write_json_file(MEMBERS_FILE, DEFAULT_MEMBERS, "init: default members")
+        return list(DEFAULT_MEMBERS)
+    return members
+
+
+# ---------- 事件 CRUD ----------
+
+def get_all_events() -> list:
+    return _read_json_file(EVENTS_FILE)
+
+
+def _next_event_id(events: list) -> int:
+    if not events:
+        return 1
+    return max(e.get("id", 0) for e in events) + 1
+
+
+def create_event(event_data: dict) -> dict:
+    events = get_all_events()
+    event_data["id"] = _next_event_id(events)
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    event_data.setdefault("created_at", now)
+    event_data.setdefault("updated_at", now)
+    # 设置颜色
+    event_type = event_data.get("event_type", "其他")
+    event_data["color"] = EVENT_TYPE_COLORS.get(event_type, "#a6cbb5")
+    events.append(event_data)
+    _write_json_file(EVENTS_FILE, events, f"create event: {event_data.get('title', '')}")
+    return event_data
+
+
+def update_event(event_id: int, update_data: dict) -> dict | None:
+    events = get_all_events()
+    for i, e in enumerate(events):
+        if e["id"] == event_id:
+            from datetime import datetime, timezone
+            update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+            if "event_type" in update_data:
+                update_data["color"] = EVENT_TYPE_COLORS.get(update_data["event_type"], "#a6cbb5")
+            e.update(update_data)
+            events[i] = e
+            _write_json_file(EVENTS_FILE, events, f"update event: {e.get('title', '')}")
+            return e
+    return None
+
+
+def delete_event(event_id: int) -> bool:
+    events = get_all_events()
+    new_events = [e for e in events if e["id"] != event_id]
+    if len(new_events) == len(events):
+        return False
+    _write_json_file(EVENTS_FILE, new_events, "delete event")
+    return True
