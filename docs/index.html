@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>团队共享日程</title>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root { --primary:#9fbcdb;--secondary:#bbaecc;--accent:#eecba8;--success:#a6cbb5;--warning:#ebd59a;--danger:#e0a2a2;--bglight:#f5f6f8;--textmain:#4a4a59;--textmuted:#8e8e9e; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    html,body{height:100%;}
+    body{font-family:'Inter',-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;background:var(--bglight);color:var(--textmain);-webkit-font-smoothing:antialiased;}
+    .login-overlay{position:fixed;inset:0;background:var(--bglight);display:flex;align-items:center;justify-content:center;z-index:9999;}
+    .login-card{background:#fff;border-radius:1.5rem;box-shadow:0 10px 30px -10px rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.03);padding:3rem 2.5rem;max-width:420px;width:90%;text-align:center;}
+    .login-card h1{font-size:1.5rem;font-weight:800;margin-bottom:.5rem;}
+    .login-card p{font-size:.875rem;color:var(--textmuted);margin-bottom:2rem;}
+    .member-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;}
+    .member-btn{display:flex;flex-direction:column;align-items:center;gap:.5rem;padding:1.25rem .5rem;border-radius:1rem;border:2px solid transparent;background:var(--bglight);cursor:pointer;transition:all .2s;}
+    .member-btn:hover{border-color:var(--primary);transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.06);}
+    .member-avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.125rem;color:#fff;}
+    .member-btn span{font-size:.8125rem;font-weight:600;}
+    .app-container{max-width:1280px;margin:0 auto;padding:1.5rem 1rem;}
+    .app-container.hidden{display:none;}
+    .top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem;}
+    .top-bar-left{display:flex;align-items:center;gap:1rem;}
+    .top-bar-left h1{font-size:1.375rem;font-weight:800;}
+    .current-user-badge{display:inline-flex;align-items:center;gap:.375rem;padding:.375rem .75rem;border-radius:.75rem;font-size:.8125rem;font-weight:600;color:#fff;}
+    .top-bar-right{display:flex;align-items:center;gap:.75rem;}
+    .btn{display:inline-flex;align-items:center;gap:.375rem;padding:.5rem 1rem;border-radius:.75rem;font-size:.875rem;font-weight:600;cursor:pointer;border:none;transition:all .15s;}
+    .btn-primary{background:var(--primary);color:var(--textmain);box-shadow:0 4px 0 0 rgba(0,0,0,.08);}
+    .btn-primary:active{transform:translateY(3px);box-shadow:0 1px 0 0 rgba(0,0,0,.08);}
+    .btn-ghost{background:transparent;color:var(--textmuted);border:1px solid rgba(0,0,0,.08);}
+    .btn-ghost:hover{background:var(--bglight);color:var(--textmain);}
+    .btn-danger-outline{background:transparent;color:var(--danger);border:1px solid var(--danger);}
+    .btn-danger-outline:hover{background:var(--danger);color:#fff;}
+    .filter-bar{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;}
+    .filter-chip{padding:.375rem .875rem;border-radius:2rem;font-size:.75rem;font-weight:600;cursor:pointer;border:1.5px solid transparent;background:#fff;color:var(--textmuted);transition:all .15s;}
+    .filter-chip:hover{border-color:rgba(0,0,0,.1);}
+    .filter-chip.active{color:var(--textmain);}
+    .filter-chip[data-type="卖方路演"].active{background:#9fbcdb30;border-color:var(--primary);}
+    .filter-chip[data-type="基金经理需求"].active{background:#eecba830;border-color:var(--accent);}
+    .filter-chip[data-type="其他"].active{background:#a6cbb530;border-color:var(--success);}
+    .filter-chip[data-type="全部"].active{background:var(--bglight);border-color:rgba(0,0,0,.1);}
+    .calendar-card{background:#fff;border-radius:1.5rem;box-shadow:0 10px 30px -10px rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.03);padding:1rem 1.25rem;position:relative;}
+    .fc{--fc-border-color:rgba(0,0,0,.06);--fc-page-bg-color:#fff;--fc-neutral-bg-color:#f5f6f8;--fc-today-bg-color:rgba(159,188,219,.12);--fc-event-bg-color:#9fbcdb;--fc-event-border-color:#9fbcdb;--fc-event-text-color:#4a4a59;--fc-button-bg-color:#fff;--fc-button-border-color:rgba(0,0,0,.08);--fc-button-text-color:#4a4a59;--fc-button-hover-bg-color:#f5f6f8;--fc-button-hover-border-color:rgba(0,0,0,.1);--fc-button-active-bg-color:#9fbcdb;--fc-button-active-border-color:#9fbcdb;font-family:inherit;}
+    .fc .fc-toolbar-title{font-size:1.125rem;font-weight:800;}
+    .fc .fc-button{font-weight:700;border-radius:.5rem;padding:.375rem .75rem;font-size:.875rem;text-transform:none;}
+    .fc .fc-button-primary:not(:disabled).fc-button-active,.fc .fc-button-primary:not(:disabled):active{color:#fff;}
+    .fc .fc-col-header-cell-cushion{font-size:.75rem;font-weight:700;color:var(--textmuted);padding:.5rem 0;}
+    .fc .fc-daygrid-day-number{font-size:.875rem;font-weight:700;padding:.25rem .5rem;}
+    .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number{color:var(--primary);}
+    .fc-event{border-radius:.5rem;padding:0 .375rem;font-size:12px;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.06);border:none!important;cursor:pointer;}
+    .fc-event-main{color:var(--textmain);}
+    .fc .fc-daygrid-day-frame{min-height:100px;}
+    ::-webkit-scrollbar{width:6px;height:6px;}
+    ::-webkit-scrollbar-track{background:#f1f1f1;border-radius:4px;}
+    ::-webkit-scrollbar-thumb{background:#dcdcdc;border-radius:4px;}
+    ::-webkit-scrollbar-thumb:hover{background:#bbaecc;}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:1000;opacity:0;pointer-events:none;transition:opacity .2s;}
+    .modal-overlay.open{opacity:1;pointer-events:auto;}
+    .modal-card{background:#fff;border-radius:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,.12);max-width:540px;width:92%;max-height:90vh;overflow-y:auto;padding:2rem;transform:translateY(20px);transition:transform .2s;}
+    .modal-overlay.open .modal-card{transform:translateY(0);}
+    .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;}
+    .modal-header h2{font-size:1.25rem;font-weight:800;}
+    .close-btn{width:32px;height:32px;border-radius:50%;background:var(--bglight);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--textmuted);font-size:1rem;transition:all .15s;}
+    .close-btn:hover{background:var(--danger);color:#fff;}
+    .form-group{margin-bottom:1rem;}
+    .form-group label{display:block;font-size:.8125rem;font-weight:600;margin-bottom:.375rem;}
+    .form-group label .required{color:var(--danger);margin-left:2px;}
+    .form-control{width:100%;padding:.625rem .875rem;border:1.5px solid rgba(0,0,0,.08);border-radius:.75rem;font-size:.875rem;color:var(--textmain);background:#fff;font-family:inherit;transition:border-color .15s;}
+    .form-control:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(159,188,219,.2);}
+    textarea.form-control{resize:vertical;min-height:72px;}
+    select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238e8e9e'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .75rem center;padding-right:2rem;}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;}
+    .form-actions{display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(0,0,0,.06);}
+    .type-indicator{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:middle;}
+    .file-upload-area{border:2px dashed rgba(0,0,0,.1);border-radius:.75rem;padding:1rem;text-align:center;cursor:pointer;transition:border-color .15s;}
+    .file-upload-area:hover{border-color:var(--primary);}
+    .file-upload-area i{color:var(--textmuted);font-size:1.5rem;}
+    .file-upload-area p{font-size:.75rem;color:var(--textmuted);margin-top:.375rem;}
+    .sync-indicator{position:absolute;right:1.5rem;top:1.5rem;font-size:.75rem;color:var(--textmuted);display:flex;align-items:center;gap:.375rem;}
+    .sync-indicator.syncing i{animation:fa-spin 1s linear infinite;}
+    .detail-field{margin-bottom:.75rem;}
+    .detail-field .label{font-size:.75rem;font-weight:600;color:var(--textmuted);margin-bottom:.25rem;}
+    .detail-field .value{font-size:.875rem;}
+    .loading-overlay{position:fixed;inset:0;background:var(--bglight);display:flex;align-items:center;justify-content:center;z-index:99999;flex-direction:column;gap:1rem;}
+    .loading-overlay .spinner{font-size:2rem;color:var(--primary);}
+    @media(max-width:640px){.member-grid{grid-template-columns:repeat(2,1fr);}.form-row{grid-template-columns:1fr;}.app-container{padding:1rem .5rem;}.modal-card{padding:1.25rem;}}
+  </style>
+</head>
+<body>
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="spinner"><i class="fa fa-circle-o-notch fa-spin"></i></div>
+    <p>正在加载数据...</p>
+  </div>
+  <div id="loginOverlay" class="login-overlay" style="display:none;">
+    <div class="login-card">
+      <div style="width:48px;height:48px;border-radius:1rem;background:var(--primary);display:inline-flex;align-items:center;justify-content:center;margin-bottom:1rem;">
+        <i class="fa fa-calendar" style="color:#fff;font-size:1.25rem;"></i>
+      </div>
+      <h1>团队共享日程</h1>
+      <p>请选择你的身份开始使用</p>
+      <div id="memberGrid" class="member-grid"></div>
+    </div>
+  </div>
+  <div id="appContainer" class="app-container hidden">
+    <div class="top-bar">
+      <div class="top-bar-left">
+        <h1><i class="fa fa-calendar-check-o" style="color:var(--primary);margin-right:.375rem;"></i>团队共享日程</h1>
+        <span id="currentUserBadge" class="current-user-badge"></span>
+      </div>
+      <div class="top-bar-right">
+        <button class="btn btn-primary" onclick="openCreateModal()"><i class="fa fa-plus"></i> 新建日程</button>
+        <button class="btn btn-ghost" onclick="logout()"><i class="fa fa-sign-out"></i> 退出</button>
+      </div>
+    </div>
+    <div class="filter-bar">
+      <button class="filter-chip active" data-type="全部" onclick="setFilter('全部',this)"><i class="fa fa-th"></i> 全部</button>
+      <button class="filter-chip" data-type="卖方路演" onclick="setFilter('卖方路演',this)"><span class="type-indicator" style="background:#9fbcdb;"></span>卖方路演</button>
+      <button class="filter-chip" data-type="基金经理需求" onclick="setFilter('基金经理需求',this)"><span class="type-indicator" style="background:#eecba8;"></span>基金经理需求</button>
+      <button class="filter-chip" data-type="其他" onclick="setFilter('其他',this)"><span class="type-indicator" style="background:#a6cbb5;"></span>其他</button>
+    </div>
+    <div class="calendar-card">
+      <div id="syncIndicator" class="sync-indicator" style="display:none;"><i class="fa fa-circle-o-notch"></i> 同步中</div>
+      <div id="calendar"></div>
+    </div>
+    <footer style="text-align:center;font-size:.75rem;color:var(--textmuted);margin-top:2rem;padding-bottom:1rem;">所有团队成员均可查看和编辑全部日程</footer>
+  </div>
+  <!-- 新建/编辑弹窗 -->
+  <div id="eventModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header"><h2 id="modalTitle">新建日程</h2><button class="close-btn" onclick="closeModal()"><i class="fa fa-times"></i></button></div>
+      <form id="eventForm" onsubmit="handleSubmit(event)">
+        <input type="hidden" id="eventId" />
+        <div class="form-row">
+          <div class="form-group"><label>所属机构 <span class="required">*</span></label><input type="text" id="participantOrg" class="form-control" placeholder="如：天风固收" required oninput="updateAutoTitle()" /></div>
+          <div class="form-group"><label>参与人姓名 <span class="required">*</span></label><input type="text" id="participantName" class="form-control" placeholder="如：吕品" required oninput="updateAutoTitle()" /></div>
+        </div>
+        <div class="form-group"><label>日程标题 <span style="font-size:.75rem;color:var(--textmuted);font-weight:400;">（自动生成）</span></label><input type="text" id="eventTitle" class="form-control" placeholder="天风固收·吕品" readonly style="background:#f5f6f8;cursor:default;" /></div>
+        <div class="form-row">
+          <div class="form-group"><label>日程类型 <span class="required">*</span></label><select id="eventType" class="form-control" onchange="onTypeChange()" required><option value="卖方路演">卖方路演</option><option value="基金经理需求">基金经理需求</option><option value="其他">其他</option></select></div>
+          <div class="form-group"><label>&nbsp;</label><div style="display:flex;align-items:center;height:42px;"><span id="typeColorPreview" class="type-indicator" style="width:16px;height:16px;background:#9fbcdb;"></span><span id="typeColorLabel" style="font-size:.8125rem;color:var(--textmuted);margin-left:4px;">柔和蓝</span></div></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>开始时间 <span class="required">*</span></label><input type="datetime-local" id="eventStart" class="form-control" required /></div>
+          <div class="form-group"><label>结束时间 <span class="required">*</span></label><input type="datetime-local" id="eventEnd" class="form-control" required /></div>
+        </div>
+        <div class="form-group"><label>详细描述</label><textarea id="eventDesc" class="form-control" placeholder="日程详细说明"></textarea></div>
+        <div class="form-group"><label>附件</label><div class="file-upload-area" onclick="document.getElementById('fileInput').click()"><i class="fa fa-cloud-upload"></i><p id="fileLabel">点击上传附件</p><input type="file" id="fileInput" style="display:none" onchange="onFileSelected(this)" /></div></div>
+        <div class="form-group"><label>备注</label><textarea id="eventNotes" class="form-control" placeholder="补充备注信息" rows="2"></textarea></div>
+        <div class="form-actions">
+          <button type="button" id="deleteBtn" class="btn btn-danger-outline" style="display:none;margin-right:auto;" onclick="handleDelete()"><i class="fa fa-trash-o"></i> 删除</button>
+          <button type="button" class="btn btn-ghost" onclick="closeModal()">取消</button>
+          <button type="submit" class="btn btn-primary"><i class="fa fa-check"></i> <span id="submitLabel">创建</span></button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <!-- 详情弹窗 -->
+  <div id="detailModal" class="modal-overlay">
+    <div class="modal-card" style="max-width:480px;">
+      <div class="modal-header"><h2>日程详情</h2><button class="close-btn" onclick="closeDetailModal()"><i class="fa fa-times"></i></button></div>
+      <div id="detailContent"></div>
+      <div class="form-actions" style="margin-top:1.25rem;">
+        <button class="btn btn-danger-outline" id="detailDeleteBtn" onclick="handleDeleteFromDetail()"><i class="fa fa-trash-o"></i> 删除</button>
+        <button class="btn btn-ghost" onclick="closeDetailModal()">关闭</button>
+        <button class="btn btn-primary" id="detailEditBtn" onclick="editFromDetail()"><i class="fa fa-pencil"></i> 编辑</button>
+      </div>
+    </div>
+  </div>
+<script src="config.js"></script>
+<script>
+// ===== GitHub API 配置 =====
+const GH = {
+  token: GH_CONFIG.token,
+  owner: GH_CONFIG.owner,
+  repo: GH_CONFIG.repo,
+  branch: GH_CONFIG.branch,
+  apiBase: 'https://api.github.com',
+};
+const HEADERS = { 'Authorization': `token ${GH.token}`, 'Accept': 'application/vnd.github.v3+json' };
+
+// ===== 全局状态 =====
+let currentMember = null;
+let members = [];
+let allEvents = [];
+let activeFilter = '全部';
+let calendar = null;
+let currentDetailEventId = null;
+let uploadedFile = null;
+let lastEventsJson = '';
+
+const TYPE_COLORS = { '卖方路演':{color:'#9fbcdb',label:'柔和蓝'}, '基金经理需求':{color:'#eecba8',label:'蜜桃橙'}, '其他':{color:'#a6cbb5',label:'莫兰迪绿'} };
+const DEFAULT_MEMBERS = [
+  {id:1,name:'刘安林',avatar_color:'#9fbcdb'},{id:2,name:'曹天姿',avatar_color:'#bbaecc'},
+  {id:3,name:'陈硕',avatar_color:'#eecba8'},{id:4,name:'张子怡',avatar_color:'#a6cbb5'},
+  {id:5,name:'姚志锋',avatar_color:'#ebd59a'},{id:6,name:'陈肃磊',avatar_color:'#e0a2a2'},
+];
+const EVENT_TYPE_COLORS = {'卖方路演':'#9fbcdb','基金经理需求':'#eecba8','其他':'#a6cbb5'};
+
+// ===== GitHub API 工具函数 =====
+async function ghGetFile(path) {
+  const url = `${GH.apiBase}/repos/${GH.owner}/${GH.repo}/contents/${path}?ref=${GH.branch}`;
+  const res = await fetch(url, { headers: HEADERS });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+  const data = await res.json();
+  const content = atob(data.content.replace(/\n/g, ''));
+  return { content: JSON.parse(content), sha: data.sha };
+}
+
+async function ghPutFile(path, content, message, sha) {
+  const url = `${GH.apiBase}/repos/${GH.owner}/${GH.repo}/contents/${path}`;
+  const payload = { message, content: btoa(unescape(encodeURIComponent(JSON.stringify(content)))), branch: GH.branch };
+  if (sha) payload.sha = sha;
+  const res = await fetch(url, { method: 'PUT', headers: HEADERS, body: JSON.stringify(payload) });
+  if (!res.ok) { const err = await res.json().catch(()=>({})); throw new Error(err.message || `Upload failed: ${res.status}`); }
+  return res.json();
+}
+
+async function ghUploadBinary(path, base64Content, message, sha) {
+  const url = `${GH.apiBase}/repos/${GH.owner}/${GH.repo}/contents/${path}`;
+  const payload = { message, content: base64Content, branch: GH.branch };
+  if (sha) payload.sha = sha;
+  const res = await fetch(url, { method: 'PUT', headers: HEADERS, body: JSON.stringify(payload) });
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+  return res.json();
+}
+
+// ===== 数据读写 =====
+async function loadMembers() {
+  try {
+    const result = await ghGetFile('data/members.json');
+    if (result && result.content) { members = result.content; return; }
+  } catch(e) { console.warn('Load members failed, using defaults:', e); }
+  members = [...DEFAULT_MEMBERS];
+  // 保存默认成员到 GitHub
+  try { await ghPutFile('data/members.json', members, 'init: default members'); } catch(e) { console.warn('Save members failed:', e); }
+}
+
+async function loadEvents() {
+  showSync(true);
+  try {
+    const result = await ghGetFile('data/events.json');
+    if (result) {
+      allEvents = result.content;
+      lastEventsJson = JSON.stringify(allEvents);
+    } else {
+      allEvents = [];
+      lastEventsJson = '[]';
+    }
+    refreshCalendarEvents();
+  } catch(e) { console.warn('Load events failed:', e); allEvents = []; }
+  showSync(false);
+}
+
+async function saveEvents(message) {
+  showSync(true);
+  try {
+    // 先获取当前 sha
+    let sha = null;
+    try { const r = await ghGetFile('data/events.json'); if (r) sha = r.sha; } catch(e) {}
+    await ghPutFile('data/events.json', allEvents, message || 'update events', sha);
+    lastEventsJson = JSON.stringify(allEvents);
+  } catch(e) { console.error('Save events failed:', e); alert('保存失败，请重试'); }
+  showSync(false);
+}
+
+function showSync(on) {
+  const el = document.getElementById('syncIndicator');
+  el.style.display = on ? '' : 'none';
+  if (on) el.classList.add('syncing'); else el.classList.remove('syncing');
+}
+
+function nextId() { return allEvents.length === 0 ? 1 : Math.max(...allEvents.map(e=>e.id||0)) + 1; }
+
+// ===== 初始化 =====
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadMembers();
+  document.getElementById('loadingOverlay').style.display = 'none';
+  document.getElementById('loginOverlay').style.display = '';
+  renderMemberGrid();
+  // 恢复会话
+  const savedId = localStorage.getItem('currentMemberId');
+  if (savedId) { const id = parseInt(savedId); if (members.find(m=>m.id===id)) login(id); }
+  // 轮询刷新
+  setInterval(async () => {
+    if (!calendar) return;
+    try {
+      const result = await ghGetFile('data/events.json');
+      if (result) {
+        const newJson = JSON.stringify(result.content);
+        if (newJson !== lastEventsJson) { allEvents = result.content; lastEventsJson = newJson; refreshCalendarEvents(); }
+      }
+    } catch(e) {}
+  }, 10000);
+});
+
+function renderMemberGrid() {
+  document.getElementById('memberGrid').innerHTML = members.map(m =>
+    `<button class="member-btn" onclick="login(${m.id})"><div class="member-avatar" style="background:${m.avatar_color}">${m.name.charAt(0)}</div><span>${m.name}</span></button>`
+  ).join('');
+}
+
+function login(memberId) {
+  currentMember = members.find(m => m.id === memberId);
+  if (!currentMember) return;
+  localStorage.setItem('currentMemberId', currentMember.id);
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('appContainer').classList.remove('hidden');
+  const badge = document.getElementById('currentUserBadge');
+  badge.style.background = currentMember.avatar_color;
+  badge.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:#fff;"></span> ${currentMember.name}`;
+  initCalendar();
+  loadEvents();
+}
+
+function logout() {
+  currentMember = null;
+  localStorage.removeItem('currentMemberId');
+  document.getElementById('loginOverlay').style.display = '';
+  document.getElementById('appContainer').classList.add('hidden');
+  if (calendar) { calendar.destroy(); calendar = null; }
+}
+
+// ===== 日历 =====
+function initCalendar() {
+  const el = document.getElementById('calendar');
+  calendar = new FullCalendar.Calendar(el, {
+    initialView:'dayGridMonth', locale:'zh-cn', firstDay:1, height:'auto',
+    buttonText:{today:'今天',month:'月',week:'周',day:'日'},
+    headerToolbar:{left:'prev,next today',center:'title',right:'dayGridMonth,timeGridWeek,timeGridDay'},
+    dayMaxEvents:3, moreLinkText:n=>`还有 ${n} 场`, events:[], selectable:true, editable:true, eventDisplay:'block',
+    eventTimeFormat:{hour:'2-digit',minute:'2-digit',hour12:false},
+    dateClick:info=>openCreateModal(info.dateStr),
+    eventClick:info=>{info.jsEvent.preventDefault();showDetail(info.event.id);},
+    eventDrop:info=>{const ev=info.event;if(!ev.start||!ev.end){info.revert();return;}updateEventTime(ev.id,ev.start,ev.end,info.revert);},
+    eventResize:info=>{const ev=info.event;if(!ev.start||!ev.end){info.revert();return;}updateEventTime(ev.id,ev.start,ev.end,info.revert);}
+  });
+  calendar.render();
+}
+
+async function updateEventTime(id, start, end, revert) {
+  const idx = allEvents.findIndex(e=>String(e.id)===String(id));
+  if (idx<0) { revert(); return; }
+  allEvents[idx].start_at = dateToLocalISO(start)+':00';
+  allEvents[idx].end_at = dateToLocalISO(end)+':00';
+  allEvents[idx].updated_at = new Date().toISOString();
+  refreshCalendarEvents();
+  await saveEvents(`update event time: ${allEvents[idx].title}`);
+}
+
+function refreshCalendarEvents() {
+  if (!calendar) return;
+  const filtered = activeFilter==='全部' ? allEvents : allEvents.filter(e=>e.event_type===activeFilter);
+  calendar.removeAllEvents();
+  filtered.forEach(e=>{
+    calendar.addEvent({id:String(e.id),title:e.title,start:e.start_at,end:e.end_at,backgroundColor:e.color,borderColor:e.color,textColor:'#4a4a59',extendedProps:{...e}});
+  });
+}
+
+function setFilter(type,btn) {
+  activeFilter=type;
+  document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
+  btn.classList.add('active');
+  refreshCalendarEvents();
+}
+
+// ===== 弹窗 =====
+function openCreateModal(dateStr) {
+  document.getElementById('modalTitle').textContent='新建日程';
+  document.getElementById('submitLabel').textContent='创建';
+  document.getElementById('deleteBtn').style.display='none';
+  document.getElementById('eventForm').reset();
+  document.getElementById('eventId').value='';
+  uploadedFile=null;
+  document.getElementById('fileLabel').textContent='点击上传附件';
+  let start,end;
+  if(dateStr){start=new Date(dateStr+'T09:00:00');}else{start=new Date();start.setMinutes(0,0,0);}
+  end=new Date(start.getTime()+3600000);
+  document.getElementById('eventStart').value=toLocalDatetimeStr(start);
+  document.getElementById('eventEnd').value=toLocalDatetimeStr(end);
+  onTypeChange();
+  document.getElementById('eventModal').classList.add('open');
+}
+
+function openEditModal(ev) {
+  document.getElementById('modalTitle').textContent='编辑日程';
+  document.getElementById('submitLabel').textContent='保存';
+  document.getElementById('deleteBtn').style.display='';
+  document.getElementById('eventId').value=ev.id;
+  document.getElementById('eventType').value=ev.event_type||'其他';
+  document.getElementById('eventStart').value=isoToLocalDatetime(ev.start_at);
+  document.getElementById('eventEnd').value=isoToLocalDatetime(ev.end_at);
+  document.getElementById('participantOrg').value=ev.participant_org||'';
+  document.getElementById('participantName').value=ev.participant_name||'';
+  updateAutoTitle();
+  document.getElementById('eventDesc').value=ev.description||'';
+  document.getElementById('eventNotes').value=ev.notes||'';
+  uploadedFile=ev.attachment||null;
+  document.getElementById('fileLabel').textContent=ev.attachment?'已上传附件':'点击上传附件';
+  onTypeChange();
+  document.getElementById('eventModal').classList.add('open');
+}
+
+function closeModal(){document.getElementById('eventModal').classList.remove('open');}
+
+function showDetail(eventId) {
+  const e=allEvents.find(ev=>String(ev.id)===String(eventId));
+  if(!e)return;
+  currentDetailEventId=e.id;
+  const creator=members.find(m=>m.id===e.created_by);
+  document.getElementById('detailContent').innerHTML=`
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;"><span class="type-indicator" style="width:20px;height:20px;background:${e.color};border-radius:6px;"></span><span style="font-size:.8125rem;font-weight:600;color:var(--textmuted);">${e.event_type}</span></div>
+    <h3 style="font-size:1.125rem;font-weight:800;margin-bottom:1rem;">${escapeHtml(e.title)}</h3>
+    <div class="detail-field"><div class="label"><i class="fa fa-clock-o" style="width:16px;"></i> 时间</div><div class="value">${formatTime(e.start_at)} ~ ${formatTime(e.end_at)}</div></div>
+    <div class="detail-field"><div class="label"><i class="fa fa-user" style="width:16px;"></i> 参与人</div><div class="value">${escapeHtml(e.participant_name)}（${escapeHtml(e.participant_org)}）</div></div>
+    ${e.description?`<div class="detail-field"><div class="label"><i class="fa fa-align-left" style="width:16px;"></i> 描述</div><div class="value">${escapeHtml(e.description)}</div></div>`:''}
+    ${e.notes?`<div class="detail-field"><div class="label"><i class="fa fa-sticky-note-o" style="width:16px;"></i> 备注</div><div class="value">${escapeHtml(e.notes)}</div></div>`:''}
+    ${e.attachment?`<div class="detail-field"><div class="label"><i class="fa fa-paperclip" style="width:16px;"></i> 附件</div><div class="value"><a href="${getAttachmentUrl(e.attachment)}" target="_blank">查看附件</a></div></div>`:''}
+    <div class="detail-field" style="margin-top:.5rem;"><div class="label"><i class="fa fa-user-circle" style="width:16px;"></i> 创建者</div><div class="value">${escapeHtml(creator?creator.name:'未知')}</div></div>`;
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function closeDetailModal(){document.getElementById('detailModal').classList.remove('open');currentDetailEventId=null;}
+function editFromDetail(){const e=allEvents.find(ev=>ev.id===currentDetailEventId);if(!e)return;closeDetailModal();setTimeout(()=>openEditModal(e),200);}
+
+async function handleDeleteFromDetail() {
+  if(!currentDetailEventId||!confirm('确定要删除此日程吗？'))return;
+  allEvents=allEvents.filter(e=>e.id!==currentDetailEventId);
+  refreshCalendarEvents();
+  closeDetailModal();
+  await saveEvents('delete event');
+}
+
+// ===== 表单 =====
+function updateAutoTitle(){const o=document.getElementById('participantOrg').value.trim(),n=document.getElementById('participantName').value.trim(),t=document.getElementById('eventTitle');t.value=o&&n?`${o}·${n}`:o||n||'';}
+function onTypeChange(){const t=document.getElementById('eventType').value,info=TYPE_COLORS[t]||TYPE_COLORS['其他'];document.getElementById('typeColorPreview').style.background=info.color;document.getElementById('typeColorLabel').textContent=info.label;}
+function getAttachmentUrl(a){if(!a)return '';if(a.startsWith('http'))return a;return `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/uploads/${a}`;}
+
+async function onFileSelected(input) {
+  if(!input.files||!input.files[0])return;
+  const file=input.files[0];
+  const reader=new FileReader();
+  reader.onload=async function(){
+    const base64=reader.result.split(',')[1];
+    const ext=file.name.split('.').pop();
+    const uniqueName=`${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}.${ext}`;
+    const ghPath=`uploads/${uniqueName}`;
+    try {
+      await ghUploadBinary(ghPath, base64, `upload: ${file.name}`);
+      uploadedFile=`https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${ghPath}`;
+      document.getElementById('fileLabel').textContent=file.name;
+    } catch(e) { alert('文件上传失败: '+e.message); }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function handleSubmit(e) {
+  e.preventDefault();
+  const id=document.getElementById('eventId').value;
+  const title=document.getElementById('eventTitle').value.trim();
+  const event_type=document.getElementById('eventType').value;
+  const start_at=document.getElementById('eventStart').value+':00';
+  const end_at=document.getElementById('eventEnd').value+':00';
+  const participant_name=document.getElementById('participantName').value.trim();
+  const participant_org=document.getElementById('participantOrg').value.trim();
+  const description=document.getElementById('eventDesc').value.trim();
+  const notes=document.getElementById('eventNotes').value.trim();
+
+  if(!title&&!participant_org&&!participant_name){alert('请填写所属机构或参与人姓名');return;}
+  const finalTitle=title||(participant_org&&participant_name?`${participant_org}·${participant_name}`:participant_org||participant_name);
+
+  if(id) {
+    // 编辑
+    const idx=allEvents.findIndex(ev=>String(ev.id)===String(id));
+    if(idx>=0){
+      Object.assign(allEvents[idx],{title:finalTitle,event_type,start_at,end_at,participant_name,participant_org,description,notes,attachment:uploadedFile||allEvents[idx].attachment||'',color:EVENT_TYPE_COLORS[event_type]||'#a6cbb5',updated_at:new Date().toISOString()});
+    }
+    refreshCalendarEvents();
+    closeModal();
+    await saveEvents(`update event: ${finalTitle}`);
+  } else {
+    // 新建
+    const newEvent={id:nextId(),title:finalTitle,description,event_type,start_at,end_at,participant_name,participant_org,color:EVENT_TYPE_COLORS[event_type]||'#a6cbb5',notes,attachment:uploadedFile||'',created_by:currentMember?currentMember.id:null,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+    allEvents.push(newEvent);
+    refreshCalendarEvents();
+    closeModal();
+    await saveEvents(`create event: ${finalTitle}`);
+  }
+}
+
+async function handleDelete() {
+  const id=document.getElementById('eventId').value;
+  if(!id||!confirm('确定要删除此日程吗？'))return;
+  allEvents=allEvents.filter(e=>String(e.id)!==String(id));
+  refreshCalendarEvents();
+  closeModal();
+  await saveEvents('delete event');
+}
+
+// ===== 工具函数 =====
+function dateToLocalISO(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;}
+function isoToLocalDatetime(s){return s?s.substring(0,16):'';}
+function toLocalDatetimeStr(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;}
+function formatTime(s){if(!s)return '';return s.replace('T',' ').substring(0,16);}
+function escapeHtml(s){if(!s)return '';const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+</script>
+</body>
+</html>
