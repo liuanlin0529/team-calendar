@@ -209,7 +209,11 @@ async function ghGetFile(path) {
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
   const data = await res.json();
-  const content = atob(data.content.replace(/\n/g, ''));
+  const b64 = data.content.replace(/\n/g, '');
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const content = new TextDecoder('utf-8').decode(bytes);
   return { content: JSON.parse(content), sha: data.sha };
 }
 
