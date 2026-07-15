@@ -33,3 +33,6 @@ Thumbs.db
 
 # Qoder
 .qoder/
+
+# Vercel temp
+.vercel-tmp/
