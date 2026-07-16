@@ -203,27 +203,44 @@ const DEFAULT_MEMBERS = [
 const EVENT_TYPE_COLORS = {'卖方路演':'#9fbcdb','基金经理需求':'#eecba8','其他':'#a6cbb5'};
 
 // ===== GitHub API 工具函数 =====
+let _eventsSha = localStorage.getItem('_eventsSha') || null;
+let _saving = false;
+let _saveQueue = null; // pending save promise
+
+function decodeB64Utf8(b64str) {
+  const bin = atob(b64str.replace(/\n/g, ''));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+function encodeUtf8B64(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
 async function ghGetFile(path) {
   const url = `${GH.apiBase}/repos/${GH.owner}/${GH.repo}/contents/${path}?ref=${GH.branch}`;
   const res = await fetch(url, { headers: HEADERS });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
   const data = await res.json();
-  const b64 = data.content.replace(/\n/g, '');
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const content = new TextDecoder('utf-8').decode(bytes);
-  return { content: JSON.parse(content), sha: data.sha };
+  const content = JSON.parse(decodeB64Utf8(data.content));
+  return { content, sha: data.sha };
 }
 
 async function ghPutFile(path, content, message, sha) {
   const url = `${GH.apiBase}/repos/${GH.owner}/${GH.repo}/contents/${path}`;
-  const payload = { message, content: btoa(unescape(encodeURIComponent(JSON.stringify(content)))), branch: GH.branch };
+  const payload = { message, content: encodeUtf8B64(JSON.stringify(content)), branch: GH.branch };
   if (sha) payload.sha = sha;
   const res = await fetch(url, { method: 'PUT', headers: HEADERS, body: JSON.stringify(payload) });
-  if (!res.ok) { const err = await res.json().catch(()=>({})); throw new Error(err.message || `Upload failed: ${res.status}`); }
-  return res.json();
+  if (!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    const e = new Error(err.message || `Upload failed: ${res.status}`);
+    e.status = res.status;
+    throw e;
+  }
+  const result = await res.json();
+  return result;
 }
 
 async function ghUploadBinary(path, base64Content, message, sha) {
@@ -235,42 +252,82 @@ async function ghUploadBinary(path, base64Content, message, sha) {
   return res.json();
 }
 
-// ===== 数据读写 =====
+// ===== 数据读写（带 localStorage 缓存 + 重试） =====
 async function loadMembers() {
+  // 优先从缓存加载（瞬间显示）
+  const cached = localStorage.getItem('_members');
+  if (cached) { try { members = JSON.parse(cached); } catch(e) { members = [...DEFAULT_MEMBERS]; } }
+  else { members = [...DEFAULT_MEMBERS]; }
+  // 后台从 GitHub 刷新
   try {
     const result = await ghGetFile('data/members.json');
-    if (result && result.content) { members = result.content; return; }
-  } catch(e) { console.warn('Load members failed, using defaults:', e); }
-  members = [...DEFAULT_MEMBERS];
-  // 保存默认成员到 GitHub
-  try { await ghPutFile('data/members.json', members, 'init: default members'); } catch(e) { console.warn('Save members failed:', e); }
+    if (result && result.content) {
+      members = result.content;
+      localStorage.setItem('_members', JSON.stringify(members));
+    }
+  } catch(e) { console.warn('Load members from GitHub failed, using cache:', e); }
 }
 
 async function loadEvents() {
+  // 优先从缓存加载
+  const cached = localStorage.getItem('_events');
+  if (cached) {
+    try { allEvents = JSON.parse(cached); lastEventsJson = cached; } catch(e) { allEvents = []; }
+  }
+  refreshCalendarEvents();
+  // 后台从 GitHub 刷新
   showSync(true);
   try {
     const result = await ghGetFile('data/events.json');
     if (result) {
       allEvents = result.content;
-      lastEventsJson = JSON.stringify(allEvents);
-    } else {
-      allEvents = [];
-      lastEventsJson = '[]';
+      _eventsSha = result.sha;
+      const newJson = JSON.stringify(allEvents);
+      if (newJson !== lastEventsJson) {
+        lastEventsJson = newJson;
+        localStorage.setItem('_events', newJson);
+        localStorage.setItem('_eventsSha', _eventsSha || '');
+        refreshCalendarEvents();
+      }
     }
-    refreshCalendarEvents();
-  } catch(e) { console.warn('Load events failed:', e); allEvents = []; }
+  } catch(e) { console.warn('Load events from GitHub failed, using cache:', e); }
   showSync(false);
 }
 
-async function saveEvents(message) {
+async function saveEvents(message, retries = 3) {
   showSync(true);
-  try {
-    // 先获取当前 sha
-    let sha = null;
-    try { const r = await ghGetFile('data/events.json'); if (r) sha = r.sha; } catch(e) {}
-    await ghPutFile('data/events.json', allEvents, message || 'update events', sha);
-    lastEventsJson = JSON.stringify(allEvents);
-  } catch(e) { console.error('Save events failed:', e); alert('保存失败，请重试'); }
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      // 如果没有缓存 SHA，先获取
+      if (!_eventsSha) {
+        try { const r = await ghGetFile('data/events.json'); if (r) _eventsSha = r.sha; } catch(e) {}
+      }
+      const result = await ghPutFile('data/events.json', allEvents, message || 'update events', _eventsSha);
+      // 成功后更新缓存
+      if (result && result.content) _eventsSha = result.content.sha;
+      lastEventsJson = JSON.stringify(allEvents);
+      localStorage.setItem('_events', lastEventsJson);
+      localStorage.setItem('_eventsSha', _eventsSha || '');
+      showSync(false);
+      return;
+    } catch(e) {
+      console.warn(`Save attempt ${attempt}/${retries} failed:`, e.message);
+      // SHA 冲突，清除缓存重试
+      if (e.status === 409 || e.status === 422) {
+        _eventsSha = null;
+        // 获取最新 SHA
+        try { const r = await ghGetFile('data/events.json'); if (r) _eventsSha = r.sha; } catch(e2) {}
+      }
+      if (attempt === retries) {
+        showSync(false);
+        // 保存到本地缓存，下次打开时可以恢复
+        localStorage.setItem('_events_pending', JSON.stringify(allEvents));
+        alert('\u4fdd\u5b58\u5931\u8d25\uff0c\u6570\u636e\u5df2\u7f13\u5b58\u5230\u672c\u5730\uff0c\u5237\u65b0\u9875\u9762\u540e\u4f1a\u81ea\u52a8\u91cd\u8bd5\u4fdd\u5b58');
+        return;
+      }
+      await new Promise(r => setTimeout(r, 500 * attempt));
+    }
+  }
   showSync(false);
 }
 
@@ -282,26 +339,63 @@ function showSync(on) {
 
 function nextId() { return allEvents.length === 0 ? 1 : Math.max(...allEvents.map(e=>e.id||0)) + 1; }
 
+// 检查是否有上次未保存的数据
+async function flushPending() {
+  const pending = localStorage.getItem('_events_pending');
+  if (pending) {
+    try {
+      allEvents = JSON.parse(pending);
+      _eventsSha = null;
+      await saveEvents('flush pending changes');
+      localStorage.removeItem('_events_pending');
+    } catch(e) { console.warn('Flush pending failed:', e); }
+  }
+}
+
 // ===== 初始化 =====
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadMembers();
+  // 先加载缓存（瞬间显示）
+  const cachedMembers = localStorage.getItem('_members');
+  if (cachedMembers) { try { members = JSON.parse(cachedMembers); } catch(e) { members = [...DEFAULT_MEMBERS]; } }
+  else { members = [...DEFAULT_MEMBERS]; }
+
   document.getElementById('loadingOverlay').style.display = 'none';
   document.getElementById('loginOverlay').style.display = '';
   renderMemberGrid();
+
   // 恢复会话
   const savedId = localStorage.getItem('currentMemberId');
-  if (savedId) { const id = parseInt(savedId); if (members.find(m=>m.id===id)) login(id); }
-  // 轮询刷新
+  if (savedId) {
+    const id = parseInt(savedId);
+    if (members.find(m=>m.id===id)) {
+      login(id);
+      // 登录后立即从缓存显示事件，然后后台刷新
+      await loadEvents();
+      // 刷新成员数据
+      loadMembers().then(()=>renderMemberGrid());
+      // 检查未保存的数据
+      flushPending();
+    }
+  }
+
+  // 轮询刷新（30秒间隔，减少API调用）
   setInterval(async () => {
-    if (!calendar) return;
+    if (!calendar || _saving) return;
     try {
       const result = await ghGetFile('data/events.json');
       if (result) {
         const newJson = JSON.stringify(result.content);
-        if (newJson !== lastEventsJson) { allEvents = result.content; lastEventsJson = newJson; refreshCalendarEvents(); }
+        if (newJson !== lastEventsJson) {
+          allEvents = result.content;
+          _eventsSha = result.sha;
+          lastEventsJson = newJson;
+          localStorage.setItem('_events', newJson);
+          localStorage.setItem('_eventsSha', _eventsSha || '');
+          refreshCalendarEvents();
+        }
       }
     } catch(e) {}
-  }, 10000);
+  }, 30000);
 });
 
 function renderMemberGrid() {
@@ -320,7 +414,7 @@ function login(memberId) {
   badge.style.background = currentMember.avatar_color;
   badge.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:#fff;"></span> ${currentMember.name}`;
   initCalendar();
-  loadEvents();
+  loadEvents(); // 先从缓存加载（瞬间），再后台刷新
 }
 
 function logout() {
