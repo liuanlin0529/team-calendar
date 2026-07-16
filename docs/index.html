@@ -303,8 +303,9 @@ async function saveEvents(message, retries = 3) {
         try { const r = await ghGetFile('data/events.json'); if (r) _eventsSha = r.sha; } catch(e) {}
       }
       const result = await ghPutFile('data/events.json', allEvents, message || 'update events', _eventsSha);
-      // 成功后更新缓存
-      if (result && result.content) _eventsSha = result.content.sha;
+      // 成功后更新 SHA 缓存和本地缓存
+      if (result && result.content && result.content.sha) _eventsSha = result.content.sha;
+      else _eventsSha = null; // SHA 可能已变，下次保存前重新获取
       lastEventsJson = JSON.stringify(allEvents);
       localStorage.setItem('_events', lastEventsJson);
       localStorage.setItem('_eventsSha', _eventsSha || '');
